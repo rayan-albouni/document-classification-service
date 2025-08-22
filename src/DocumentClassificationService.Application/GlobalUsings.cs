@@ -1,0 +1,4 @@
+global using DocumentClassificationService.Domain.Entities;
+global using DocumentClassificationService.Domain.ValueObjects;
+global using DocumentClassificationService.Domain.Enums;
+global using DocumentClassificationService.Domain.Interfaces;

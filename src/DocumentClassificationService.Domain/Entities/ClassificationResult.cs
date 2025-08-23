@@ -9,8 +9,6 @@ public class ClassificationResult
     public string ClassifierModelUsed { get; private set; }
     public DateTime ClassifiedAt { get; private set; }
 
-    private ClassificationResult() { }
-
     public ClassificationResult(
         DocumentId documentId, 
         DocumentType classification, 

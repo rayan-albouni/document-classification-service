@@ -7,8 +7,6 @@ public class Document
     public TenantId TenantId { get; private set; }
     public DateTime CreatedAt { get; private set; }
 
-    private Document() { }
-
     public Document(DocumentId id, string blobUrl, TenantId tenantId)
     {
         Id = id ?? throw new ArgumentNullException(nameof(id));

@@ -1,5 +1,6 @@
 using Azure;
 using Azure.AI.FormRecognizer.DocumentAnalysis;
+using Azure.Messaging.ServiceBus;
 using DocumentClassificationService.Domain.Interfaces;
 using DocumentClassificationService.Infrastructure.Configuration;
 using DocumentClassificationService.Infrastructure.Services;
@@ -18,14 +19,36 @@ public static class DependencyInjection
         services.AddSingleton<DocumentAnalysisClient>(provider =>
         {
             var settings = configuration.GetSection(DocumentIntelligenceSettings.SectionName)
-                .Get<DocumentIntelligenceSettings>() ?? throw new InvalidOperationException("DocumentIntelligence configuration is missing");
+                .Get<DocumentIntelligenceSettings>();
+            
+            if (settings == null)
+                throw new InvalidOperationException("DocumentIntelligence configuration section is missing");
+            
+            if (string.IsNullOrWhiteSpace(settings.Endpoint))
+                throw new InvalidOperationException("DocumentIntelligence:Endpoint is missing or empty");
+            
+            if (string.IsNullOrWhiteSpace(settings.ApiKey))
+                throw new InvalidOperationException("DocumentIntelligence:ApiKey is missing or empty");
+            
+            if (string.IsNullOrWhiteSpace(settings.ClassifierModelId))
+                throw new InvalidOperationException("DocumentIntelligence:ClassifierModelId is missing or empty");
 
             return new DocumentAnalysisClient(
                 new Uri(settings.Endpoint),
                 new AzureKeyCredential(settings.ApiKey));
         });
 
+        services.AddSingleton<ServiceBusClient>(provider =>
+        {
+            var connectionString = configuration.GetConnectionString("ServiceBusConnection");
+            if (string.IsNullOrWhiteSpace(connectionString))
+                throw new InvalidOperationException("ServiceBusConnection connection string is missing");
+            
+            return new ServiceBusClient(connectionString);
+        });
+
         services.AddScoped<IDocumentClassificationService, AzureDocumentIntelligenceService>();
+        services.AddScoped<IMessageBusService, AzureServiceBusService>();
 
         return services;
     }

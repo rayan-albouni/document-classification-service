@@ -40,7 +40,7 @@ public static class DependencyInjection
 
         services.AddSingleton<ServiceBusClient>(provider =>
         {
-            var connectionString = configuration.GetConnectionString("ServiceBusConnection");
+            var connectionString = configuration["ServiceBusConnection"];
             if (string.IsNullOrWhiteSpace(connectionString))
                 throw new InvalidOperationException("ServiceBusConnection connection string is missing");
             

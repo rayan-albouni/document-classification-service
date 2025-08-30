@@ -5,7 +5,7 @@ using Newtonsoft.Json;
 
 namespace DocumentClassificationService.Infrastructure.Services;
 
-public class AzureServiceBusService : IMessageBusService, IDisposable
+public class AzureServiceBusService : IMessageBusService
 {
     private readonly ServiceBusClient _serviceBusClient;
     private readonly ILogger<AzureServiceBusService> _logger;
@@ -18,61 +18,61 @@ public class AzureServiceBusService : IMessageBusService, IDisposable
         _senders = new Dictionary<string, ServiceBusSender>();
     }
 
-    public async Task SendMessageAsync<T>(string queueName, T message, CancellationToken cancellationToken = default) where T : class
+    public async Task SendMessageAsync<T>(string queueName, T message)
     {
-        try
+        if (message == null)
         {
-            var messageBody = JsonConvert.SerializeObject(message);
-            await SendMessageAsync(queueName, messageBody, Guid.NewGuid().ToString(), typeof(T).Name, cancellationToken);
+            throw new ArgumentNullException(nameof(message));
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to send message of type {MessageType} to queue {QueueName}", typeof(T).Name, queueName);
-            throw;
-        }
-    }
 
-    public async Task SendMessageAsync(string queueName, string messageBody, string? messageId = null, string? subject = null, CancellationToken cancellationToken = default)
-    {
+        if (string.IsNullOrEmpty(queueName))
+        {
+            throw new ArgumentException("Queue name cannot be null or empty", nameof(queueName));
+        }
+
         try
         {
-            var sender = GetOrCreateSender(queueName);
-            
+            _logger.LogDebug("Sending message to queue {QueueName} for message type {MessageType}",
+                queueName, typeof(T).Name);
+
+            // Serialize the message to JSON
+            var messageBody = JsonConvert.SerializeObject(message);
+
+            // Create a Service Bus message
             var serviceBusMessage = new ServiceBusMessage(messageBody)
             {
-                MessageId = messageId ?? Guid.NewGuid().ToString(),
-                Subject = subject
+                ContentType = "application/json",
+                MessageId = Guid.NewGuid().ToString()
             };
 
-            await sender.SendMessageAsync(serviceBusMessage, cancellationToken);
-            
-            _logger.LogInformation("Successfully sent message to queue {QueueName} with MessageId: {MessageId}", queueName, serviceBusMessage.MessageId);
+            // Add custom properties for better tracking
+            serviceBusMessage.ApplicationProperties.Add("MessageType", typeof(T).Name);
+            serviceBusMessage.ApplicationProperties.Add("Timestamp", DateTimeOffset.UtcNow);
+
+            // Send the message
+            await using var sender = _serviceBusClient.CreateSender(queueName);
+            await sender.SendMessageAsync(serviceBusMessage);
+
+            _logger.LogInformation("Successfully sent message {MessageId} to queue {QueueName}",
+                serviceBusMessage.MessageId, queueName);
+        }
+        catch (ServiceBusException ex)
+        {
+            _logger.LogError(ex, "Service Bus error occurred while sending message to queue {QueueName}: {ErrorReason}",
+                queueName, ex.Reason);
+            throw;
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogError(ex, "JSON serialization error occurred while sending message to queue {QueueName}",
+                queueName);
+            throw new InvalidOperationException($"Failed to serialize message for queue {queueName}", ex);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to send message to queue {QueueName}", queueName);
+            _logger.LogError(ex, "Unexpected error occurred while sending message to queue {QueueName}",
+                queueName);
             throw;
         }
-    }
-
-    private ServiceBusSender GetOrCreateSender(string queueName)
-    {
-        if (!_senders.TryGetValue(queueName, out var sender))
-        {
-            sender = _serviceBusClient.CreateSender(queueName);
-            _senders[queueName] = sender;
-        }
-        return sender;
-    }
-
-    public void Dispose()
-    {
-        foreach (var sender in _senders.Values)
-        {
-            sender.DisposeAsync().GetAwaiter().GetResult();
-        }
-        _senders.Clear();
-        
-        _serviceBusClient?.DisposeAsync().GetAwaiter().GetResult();
     }
 }
